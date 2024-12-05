@@ -53,7 +53,7 @@ from frappe.utils.data import cint, cstr, sbool
 
 # Local application imports
 from .exceptions import *
-from .types.frappedict import _dict
+from .types import Filters, FilterSignature, FilterTuple, _dict
 from .utils.jinja import (
 	get_email_from_template,
 	get_jenv,
@@ -241,7 +241,7 @@ def init(site: str, sites_path: str = ".", new_site: bool = False, force: bool =
 			"read_only": False,
 		}
 	)
-	local.locked_documents: list["Document"] = []
+	local.locked_documents: list[Document] = []
 	local.test_objects = defaultdict(list)
 
 	local.site = site
@@ -540,6 +540,11 @@ def _strip_html_tags(message):
 	return strip_html_tags(message)
 
 
+ServerAction: TypeAlias = dict
+ClientAction: TypeAlias = dict
+Action: TypeAlias = ServerAction | ClientAction
+
+
 def msgprint(
 	msg: str,
 	title: str | None = None,
@@ -548,7 +553,7 @@ def msgprint(
 	as_list: bool = False,
 	indicator: Literal["blue", "green", "orange", "red", "yellow"] | None = None,
 	alert: bool = False,
-	primary_action: str | None = None,
+	primary_action: Action | None = None,
 	is_minimizable: bool = False,
 	wide: bool = False,
 	*,
@@ -924,7 +929,7 @@ def is_whitelisted(method):
 	from frappe.utils import sanitize_html
 
 	is_guest = session["user"] == "Guest"
-	if method not in whitelisted or is_guest and method not in guest_methods:
+	if method not in whitelisted or (is_guest and method not in guest_methods):
 		summary = _("You are not permitted to access this resource.")
 		detail = _("Function {0} is not whitelisted.").format(bold(f"{method.__module__}.{method.__name__}"))
 		msg = f"<details><summary>{summary}</summary>{detail}</details>"
@@ -1297,7 +1302,7 @@ def clear_document_cache(doctype: str, name: str | None = None) -> None:
 
 
 def get_cached_value(
-	doctype: str, name: str, fieldname: str | Iterable[str] = "name", as_dict: bool = False
+	doctype: str, name: str | dict, fieldname: str | Iterable[str] = "name", as_dict: bool = False
 ) -> Any:
 	try:
 		doc = get_cached_doc(doctype, name)
@@ -1378,7 +1383,13 @@ def get_doc(*args: Any, **kwargs: Any) -> "Document":
 	return doc
 
 
-def get_last_doc(doctype, filters=None, order_by="creation desc", *, for_update=False):
+def get_last_doc(
+	doctype,
+	filters: FilterSignature | None = None,
+	order_by="creation desc",
+	*,
+	for_update=False,
+):
 	"""Get last created document of this type."""
 	d = get_all(doctype, filters=filters, limit_page_length=1, order_by=order_by, pluck="name")
 	if d:
@@ -1407,12 +1418,12 @@ def get_meta_module(doctype):
 
 def delete_doc(
 	doctype: str | None = None,
-	name: str | None = None,
+	name: str | dict | None = None,
 	force: bool = False,
 	ignore_doctypes: list[str] | None = None,
 	for_reload: bool = False,
 	ignore_permissions: bool = False,
-	flags: None = None,
+	flags: _dict | None = None,
 	ignore_on_trash: bool = False,
 	ignore_missing: bool = True,
 	delete_permanently: bool = False,
@@ -1481,8 +1492,8 @@ def reload_doc(
 @whitelist(methods=["POST", "PUT"])
 def rename_doc(
 	doctype: str,
-	old: str,
-	new: str,
+	old: str | int,
+	new: str | int,
 	force: bool = False,
 	merge: bool = False,
 	*,
@@ -2146,7 +2157,7 @@ def as_json(obj: dict | list, indent=1, separators=None, ensure_ascii=True) -> s
 
 
 def are_emails_muted():
-	return flags.mute_emails or cint(conf.get("mute_emails"))
+	return flags.mute_emails or cint(conf.get("mute_emails", 0))
 
 
 from frappe.deprecation_dumpster import frappe_get_test_records as get_test_records
@@ -2397,7 +2408,7 @@ def get_desk_link(doctype, name):
 	return html.format(doctype=doctype, name=name, doctype_local=_(doctype), title_local=_(title))
 
 
-def bold(text: str) -> str:
+def bold(text: str | int | float) -> str:
 	"""Return `text` wrapped in `<strong>` tags."""
 	return f"<strong>{text}</strong>"
 

@@ -372,6 +372,16 @@ def attach_files_to_document(doc: "Document", event) -> None:
 			)
 			continue
 
+		existing_file = frappe.db.get_value("File", {"file_url": value}, "name")
+		if existing_file:
+			frappe.get_doc("File", existing_file).create_attachment_copy(
+				attached_to_doctype=doc.doctype,
+				attached_to_name=doc.name,
+				attached_to_field=df.fieldname,
+				ignore_permissions=True,
+			)
+			continue
+
 		file: File = frappe.get_doc(
 			doctype="File",
 			file_url=value,
